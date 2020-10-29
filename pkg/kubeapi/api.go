@@ -16,12 +16,15 @@ import (
 
 const apiPath = "/apis"
 
+// KubeClient represents a client to a kubernetes API server.
 type KubeClient struct {
 	client http.Client
 	url    url.URL
 }
 
-// host can be of the form https://192.168.39.239:8443
+// NewClient returns a new KubeClient. The host is a string encoding
+// the url of the api server (https://192.168.39.239:8443 for
+// expample).
 func NewClient(host string, transport http.RoundTripper) (*KubeClient, error) {
 	u, err := url.Parse(host + apiPath + "/")
 	if err != nil {
@@ -30,6 +33,7 @@ func NewClient(host string, transport http.RoundTripper) (*KubeClient, error) {
 	return &KubeClient{client: http.Client{Transport: transport}, url: *u}, nil
 }
 
+// RequestError represents an http reply with an unsuccessful status code.
 type RequestError struct {
 	StatusCode int
 	Body       []byte
@@ -39,10 +43,8 @@ func (r *RequestError) Error() string {
 	return fmt.Sprintf("http request failed: code=%d body=\"%s\"", r.StatusCode, r.Body)
 }
 
-// We take the namespace as an argument because some resources are not namespaced
 func (client *KubeClient) do(method, group, version, namespace, path string, query url.Values,
 	data []byte) (*http.Response, error) {
-
 	url := client.url
 	url.Path += group + "/"
 	url.Path += version + "/"
@@ -56,13 +58,21 @@ func (client *KubeClient) do(method, group, version, namespace, path string, que
 	resp, err := client.client.Do(&req)
 	if err == nil && !(resp.StatusCode >= 200 && resp.StatusCode < 300) {
 		defer resp.Body.Close()
+		// Ignore any errors from ReadAll, they are probably not as interesting as the
+		// RequestError
 		body, _ := ioutil.ReadAll(resp.Body)
 		return nil, &RequestError{StatusCode: resp.StatusCode, Body: body}
 	}
 	return resp, err
 }
 
-func (client *KubeClient) Get(group, version, namespace, path string, query url.Values) (io.ReadCloser, error) {
+// Get does a GET request on a resource. Group is the Kubernetes API
+// group (apiextensions.k8s.io for example). An empty namespace means
+// this is accessing a non namespaced resource (not the default
+// namespace). An unsuccessful response is converted to an error, so
+// this just returns a io.ReadCloser for the body.
+func (client *KubeClient) Get(group, version, namespace, path string,
+	query url.Values) (io.ReadCloser, error) {
 	resp, err := client.do("GET", group, version, namespace, path, query, nil)
 	if err != nil {
 		return nil, err
@@ -70,7 +80,8 @@ func (client *KubeClient) Get(group, version, namespace, path string, query url.
 	return resp.Body, nil
 }
 
-func (client *KubeClient) putOrPost(method, group, version, namespace, path string, obj interface{}) error {
+func (client *KubeClient) putOrPost(method, group, version, namespace, path string,
+	obj interface{}) error {
 	data, err := json.Marshal(obj)
 	if err != nil {
 		return err
@@ -83,10 +94,13 @@ func (client *KubeClient) putOrPost(method, group, version, namespace, path stri
 	return err
 }
 
+// Post does a POST request on a resource. The body is the json
+// marshaling of obj. See Get for other parameters.
 func (client *KubeClient) Post(group, version, namespace, path string, obj interface{}) error {
 	return client.putOrPost("POST", group, version, namespace, path, obj)
 }
 
+// Put does a PUT request on a resource. See Post.
 func (client *KubeClient) Put(group, version, namespace, path string, obj interface{}) error {
 	return client.putOrPost("PUT", group, version, namespace, path, obj)
 }
@@ -102,6 +116,11 @@ func parseEventType(ty string) (bool, error) {
 	return false, fmt.Errorf("Invalid EventType: %s", ty)
 }
 
+// WatchEvent is a simplified view of
+// k8s.io/apimachinery/pkg/apis/meta/v1.WatchEvent. Unlike the
+// original, we only differentiate delete/add and the object is
+// decoded instead of a raw json string. Any error obtaining or
+// parsing this event is reported in Err.
 type WatchEvent struct {
 	IsDelete bool
 	Item     interface{}
@@ -126,6 +145,8 @@ func (client *KubeClient) produceResources(group, version, namespace, path strin
 
 	go func() {
 		_ = <-stopCh
+		// Closing bodyReader is probably the only way to stop
+		// decoder.Decode bellow.
 		err := bodyReader.Close()
 		// The call to Close should not fail. If it does,
 		// there is nothing for us to do but panic. We cannot
@@ -181,32 +202,42 @@ func (client *KubeClient) produceResources(group, version, namespace, path strin
 	}
 }
 
-func (client *KubeClient) GetResources(group, version, namespace, path string, query url.Values, v interface{}) (<-chan WatchEvent,
-	chan<- struct{}) {
-
+// GetResources queries the api server for a particular resource and
+// sends the resulting WatchEvent to a returned channel. It also
+// returns a second channel that should be closed to request
+// GetResources to stop. The type of the resource is identified by
+// v. The produced WatchEvents will have Items of the same type as v.
+func (client *KubeClient) GetResources(group, version, namespace, path string, query url.Values,
+	v interface{}) (<-chan WatchEvent, chan<- struct{}) {
 	ch := make(chan WatchEvent)
 	stop := make(chan struct{})
 	go client.produceResources(group, version, namespace, path, query, v, ch, stop)
 	return ch, stop
 }
 
+// GetDeployments queries the api server for deployments. See GetResources for details.
 func (client *KubeClient) GetDeployments(namespace string) (<-chan WatchEvent, chan<- struct{}) {
 	return client.GetResources("apps", "v1", namespace, "deployments", nil,
-		appsv1.Deployment{})
+                appsv1.Deployment{})
 }
 
+// AddDeployment adds a new deployment.
 func (client *KubeClient) AddDeployment(deployment *appsv1.Deployment) error {
 	return client.Post("apps", "v1", deployment.Namespace, "deployments", deployment)
 }
 
+// UpdateDeployment replaces an existing deployment.
 func (client *KubeClient) UpdateDeployment(deployment *appsv1.Deployment) error {
-	return client.Put("apps", "v1", deployment.Namespace, "deployments/"+deployment.Name, deployment)
+	return client.Put("apps", "v1", deployment.Namespace, "deployments/"+deployment.Name,
+                deployment)
 }
 
+// AddCustomResourceDefinition adds a new CRD.
 func (client *KubeClient) AddCustomResourceDefinition(crd *apiextensionsv1.CustomResourceDefinition) error {
 	return client.Post("apiextensions.k8s.io", "v1", "", "customresourcedefinitions", crd)
 }
 
+// GetCustomResourceDefinitions queries the api server for CRDs. See GetResources for details.
 func (client *KubeClient) GetCustomResourceDefinitions(name string) (<-chan WatchEvent,
 	chan<- struct{}) {
 	return client.GetResources("apiextensions.k8s.io", "v1", "", "customresourcedefinitions",
