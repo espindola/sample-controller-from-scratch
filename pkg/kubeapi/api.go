@@ -136,8 +136,13 @@ func (client *KubeClient) produceResources(group, version, namespace, path strin
 	go func() {
 		_ = <-stopCh
 		err := bodyReader.Close()
+		// The call to Close should not fail. If it does,
+		// there is nothing for us to do but panic. We cannot
+		// send the error to the out channel as it might be
+		// closed. It should also not be ignored, as the loop
+		// bellow might be forever stuck in Decode.
 		if err != nil {
-			out <- WatchEvent{Err: err}
+			panic(err)
 		}
 	}()
 
