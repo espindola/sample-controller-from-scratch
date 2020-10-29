@@ -108,15 +108,6 @@ type WatchEvent struct {
 	Err      error
 }
 
-func unmarshal(isDelete bool, data []byte, ty reflect.Type) WatchEvent {
-	obj := reflect.New(ty)
-	err := json.Unmarshal(data, obj.Interface())
-	if err != nil {
-		return WatchEvent{Err: fmt.Errorf("Unmarshaling of resource failed: %w", err)}
-	}
-	return WatchEvent{IsDelete: isDelete, Item: reflect.Indirect(obj).Interface()}
-}
-
 func (client *KubeClient) produceResources(group, version, namespace, path string, query url.Values, v interface{},
 	out chan<- WatchEvent, stopCh <-chan struct{}) {
 
@@ -146,34 +137,47 @@ func (client *KubeClient) produceResources(group, version, namespace, path strin
 		}
 	}()
 
+	send := func(ev WatchEvent) {
+		// If we were asked to stop, don't send. The event
+		// might be the last error produced by closing
+		// bodyReader.
+		select {
+		case _ = <-stopCh:
+			return
+		default:
+		}
+
+		// Send, but still watch stopCh in case the client is
+		// not interested.
+		select {
+		case _ = <-stopCh:
+			return
+		case out <- ev:
+		}
+	}
+
 	decoder := json.NewDecoder(bodyReader)
 	for {
 		we := metav1.WatchEvent{}
 		if err = decoder.Decode(&we); err != nil {
-			// If we were asked to stop, don't report an error.
-			select {
-			case _ = <-stopCh:
-				return
-			default:
-			}
-
-			// Send the error, but still watch stopCh in case the client is not
-			// interested.
-			ev := WatchEvent{Err: fmt.Errorf("Could not decode WatchEvent(%s): %w", path,
-				err)}
-			select {
-			case _ = <-stopCh:
-				return
-			case out <- ev:
-			}
+			err = fmt.Errorf("Could not decode WatchEvent(%s): %w", path, err)
+			send(WatchEvent{Err: err})
 			return
 		}
-		et, err := parseEventType(we.Type)
+		isDelete, err := parseEventType(we.Type)
 		if err != nil {
-			out <- WatchEvent{Err: err}
+			send(WatchEvent{Err: err})
+			return
 		}
 
-		out <- unmarshal(et, we.Object.Raw, ty)
+		obj := reflect.New(ty)
+		err = json.Unmarshal(we.Object.Raw, obj.Interface())
+		if err != nil {
+			err = fmt.Errorf("Unmarshaling of resource failed: %w", err)
+			send(WatchEvent{Err: err})
+			return
+		}
+		send(WatchEvent{IsDelete: isDelete, Item: reflect.Indirect(obj).Interface()})
 	}
 }
 
