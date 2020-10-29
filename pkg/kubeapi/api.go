@@ -14,20 +14,20 @@ import (
 	"reflect"
 )
 
-const APIPath = "/apis"
+const apiPath = "/apis"
 
 type KubeClient struct {
-	Client http.Client
+	client http.Client
 	url    url.URL
 }
 
 // host can be of the form https://192.168.39.239:8443
 func NewClient(host string, transport http.RoundTripper) (*KubeClient, error) {
-	u, err := url.Parse(host + APIPath + "/")
+	u, err := url.Parse(host + apiPath + "/")
 	if err != nil {
 		return nil, err
 	}
-	return &KubeClient{Client: http.Client{Transport: transport}, url: *u}, nil
+	return &KubeClient{client: http.Client{Transport: transport}, url: *u}, nil
 }
 
 type RequestError struct {
@@ -53,7 +53,7 @@ func (client *KubeClient) do(method string, group string, version string, namesp
 	url.RawQuery = query.Encode()
 	reader := ioutil.NopCloser(bytes.NewReader(data))
 	req := http.Request{Method: method, URL: &url, Body: reader}
-	resp, err := client.Client.Do(&req)
+	resp, err := client.client.Do(&req)
 	if err == nil && !(resp.StatusCode >= 200 && resp.StatusCode < 300) {
 		defer resp.Body.Close()
 		body, _ := ioutil.ReadAll(resp.Body)
