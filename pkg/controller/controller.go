@@ -207,8 +207,8 @@ func synchronize(client *kubeapi.KubeClient, status *controllerStatus) error {
 
 // processResources goes over the existing Foos and Deployments
 // and synchronizes them.
-func processResources(c *Controller, deploymentsCh <-chan kubeapi.Event,
-	foosCh <-chan kubeapi.Event) {
+func processResources(c *Controller, deploymentsCh <-chan kubeapi.WatchEvent,
+	foosCh <-chan kubeapi.WatchEvent) {
 	defer close(c.Errors)
 
 	status := controllerStatus{}

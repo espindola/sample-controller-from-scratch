@@ -102,23 +102,23 @@ func parseEventType(ty string) (bool, error) {
 	return false, fmt.Errorf("Invalid EventType: %s", ty)
 }
 
-type Event struct {
+type WatchEvent struct {
 	IsDelete bool
 	Item     interface{}
 	Err      error
 }
 
-func unmarshal(isDelete bool, data []byte, ty reflect.Type) Event {
+func unmarshal(isDelete bool, data []byte, ty reflect.Type) WatchEvent {
 	obj := reflect.New(ty)
 	err := json.Unmarshal(data, obj.Interface())
 	if err != nil {
-		return Event{Err: fmt.Errorf("Unmarshaling of resource failed: %w", err)}
+		return WatchEvent{Err: fmt.Errorf("Unmarshaling of resource failed: %w", err)}
 	}
-	return Event{IsDelete: isDelete, Item: reflect.Indirect(obj).Interface()}
+	return WatchEvent{IsDelete: isDelete, Item: reflect.Indirect(obj).Interface()}
 }
 
 func (client *KubeClient) produceResources(group string, version string, namespace string, path string, query url.Values, v interface{},
-	out chan<- Event, stopCh <-chan struct{}) {
+	out chan<- WatchEvent, stopCh <-chan struct{}) {
 
 	defer close(out)
 	ty := reflect.TypeOf(v)
@@ -129,7 +129,7 @@ func (client *KubeClient) produceResources(group string, version string, namespa
 
 	bodyReader, err := client.Get(group, version, namespace, path, query)
 	if err != nil {
-		out <- Event{Err: fmt.Errorf("Watch failed: %w", err)}
+		out <- WatchEvent{Err: fmt.Errorf("Watch failed: %w", err)}
 		return
 	}
 
@@ -137,7 +137,7 @@ func (client *KubeClient) produceResources(group string, version string, namespa
 		_ = <-stopCh
 		err := bodyReader.Close()
 		if err != nil {
-			out <- Event{Err: err}
+			out <- WatchEvent{Err: err}
 		}
 	}()
 
@@ -154,7 +154,7 @@ func (client *KubeClient) produceResources(group string, version string, namespa
 
 			// Send the error, but still watch stopCh in case the client is not
 			// interested.
-			ev := Event{Err: fmt.Errorf("Could not decode WatchEvent(%s): %w", path,
+			ev := WatchEvent{Err: fmt.Errorf("Could not decode WatchEvent(%s): %w", path,
 				err)}
 			select {
 			case _ = <-stopCh:
@@ -165,23 +165,23 @@ func (client *KubeClient) produceResources(group string, version string, namespa
 		}
 		et, err := parseEventType(we.Type)
 		if err != nil {
-			out <- Event{Err: err}
+			out <- WatchEvent{Err: err}
 		}
 
 		out <- unmarshal(et, we.Object.Raw, ty)
 	}
 }
 
-func (client *KubeClient) GetResources(group string, version string, namespace string, path string, query url.Values, v interface{}) (<-chan Event,
+func (client *KubeClient) GetResources(group string, version string, namespace string, path string, query url.Values, v interface{}) (<-chan WatchEvent,
 	chan<- struct{}) {
 
-	ch := make(chan Event)
+	ch := make(chan WatchEvent)
 	stop := make(chan struct{})
 	go client.produceResources(group, version, namespace, path, query, v, ch, stop)
 	return ch, stop
 }
 
-func (client *KubeClient) GetDeployments(namespace string) (<-chan Event, chan<- struct{}) {
+func (client *KubeClient) GetDeployments(namespace string) (<-chan WatchEvent, chan<- struct{}) {
 	return client.GetResources("apps", "v1", namespace, "deployments", nil,
 		appsv1.Deployment{})
 }
@@ -198,7 +198,7 @@ func (client *KubeClient) AddCustomResourceDefinition(crd *apiextensionsv1.Custo
 	return client.Post("apiextensions.k8s.io", "v1", "", "customresourcedefinitions", crd)
 }
 
-func (client *KubeClient) GetCustomResourceDefinitions(name string) (<-chan Event,
+func (client *KubeClient) GetCustomResourceDefinitions(name string) (<-chan WatchEvent,
 	chan<- struct{}) {
 	return client.GetResources("apiextensions.k8s.io", "v1", "", "customresourcedefinitions",
 		url.Values{"fieldSelector": []string{"metadata.name=" + name}},
