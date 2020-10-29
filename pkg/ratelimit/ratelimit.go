@@ -2,6 +2,17 @@ package ratelimit
 
 import "time"
 
+// RateLimiter is an interface that encapsulates limiting how often an
+// operation is performed.
+//
+// Users should call AskTick when they have an operation to perform
+// and then block reading from the channel returned by GetChan.
+//
+// Implementations send a message on the channel when there has been
+// at least one request and the implementation specific rate limit is
+// satisfied.
+//
+// Stop the RateLimiter to release resources.
 type RateLimiter interface {
 	AskTick()
 	GetChan() <-chan struct{}
@@ -28,7 +39,7 @@ func (rl *rateLimiterImpl) Stop() {
 
 // AfterOneSecondIdle returns a RateLimiter that sends a tick after
 // the caller is idle for one second. That is, after one second
-// without call so AskTick.
+// without a call to AskTick.
 func AfterOneSecondIdle() RateLimiter {
 	ret := &rateLimiterImpl{make(chan struct{}), make(chan struct{}), make(chan struct{})}
 	go func() {
