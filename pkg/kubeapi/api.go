@@ -40,7 +40,7 @@ func (r *RequestError) Error() string {
 }
 
 // We take the namespace as an argument because some resources are not namespaced
-func (client *KubeClient) do(method string, group string, version string, namespace string, path string, query url.Values,
+func (client *KubeClient) do(method, group, version, namespace, path string, query url.Values,
 	data []byte) (*http.Response, error) {
 
 	url := client.url
@@ -62,7 +62,7 @@ func (client *KubeClient) do(method string, group string, version string, namesp
 	return resp, err
 }
 
-func (client *KubeClient) Get(group string, version string, namespace string, path string, query url.Values) (io.ReadCloser, error) {
+func (client *KubeClient) Get(group, version, namespace, path string, query url.Values) (io.ReadCloser, error) {
 	resp, err := client.do("GET", group, version, namespace, path, query, nil)
 	if err != nil {
 		return nil, err
@@ -70,7 +70,7 @@ func (client *KubeClient) Get(group string, version string, namespace string, pa
 	return resp.Body, nil
 }
 
-func (client *KubeClient) putOrPost(method string, group string, version string, namespace string, path string, obj interface{}) error {
+func (client *KubeClient) putOrPost(method, group, version, namespace, path string, obj interface{}) error {
 	data, err := json.Marshal(obj)
 	if err != nil {
 		return err
@@ -83,11 +83,11 @@ func (client *KubeClient) putOrPost(method string, group string, version string,
 	return err
 }
 
-func (client *KubeClient) Post(group string, version string, namespace string, path string, obj interface{}) error {
+func (client *KubeClient) Post(group, version, namespace, path string, obj interface{}) error {
 	return client.putOrPost("POST", group, version, namespace, path, obj)
 }
 
-func (client *KubeClient) Put(group string, version string, namespace string, path string, obj interface{}) error {
+func (client *KubeClient) Put(group, version, namespace, path string, obj interface{}) error {
 	return client.putOrPost("PUT", group, version, namespace, path, obj)
 }
 
@@ -117,7 +117,7 @@ func unmarshal(isDelete bool, data []byte, ty reflect.Type) WatchEvent {
 	return WatchEvent{IsDelete: isDelete, Item: reflect.Indirect(obj).Interface()}
 }
 
-func (client *KubeClient) produceResources(group string, version string, namespace string, path string, query url.Values, v interface{},
+func (client *KubeClient) produceResources(group, version, namespace, path string, query url.Values, v interface{},
 	out chan<- WatchEvent, stopCh <-chan struct{}) {
 
 	defer close(out)
@@ -172,7 +172,7 @@ func (client *KubeClient) produceResources(group string, version string, namespa
 	}
 }
 
-func (client *KubeClient) GetResources(group string, version string, namespace string, path string, query url.Values, v interface{}) (<-chan WatchEvent,
+func (client *KubeClient) GetResources(group, version, namespace, path string, query url.Values, v interface{}) (<-chan WatchEvent,
 	chan<- struct{}) {
 
 	ch := make(chan WatchEvent)
