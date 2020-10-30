@@ -100,7 +100,7 @@ func (client *KubeClient) Post(group, version, namespace, path string, obj inter
 	return client.putOrPost("POST", group, version, namespace, path, obj)
 }
 
-// Put does a PUT request on a resource. See Post.
+// Put does a PUT request on a resource. See Post for the parameters.
 func (client *KubeClient) Put(group, version, namespace, path string, obj interface{}) error {
 	return client.putOrPost("PUT", group, version, namespace, path, obj)
 }
