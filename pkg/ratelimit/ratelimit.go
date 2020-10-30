@@ -45,6 +45,7 @@ func AfterOneSecondIdle() RateLimiter {
 	go func() {
 		timer := time.NewTimer(1 * time.Second)
 		timer.Stop()
+		var tick chan struct{}
 		for {
 			select {
 			case <-ret.stop:
@@ -58,7 +59,11 @@ func AfterOneSecondIdle() RateLimiter {
 				}
 				timer.Reset(1 * time.Second)
 			case <-timer.C:
-				ret.tick <- struct{}{}
+				// Enable sending on the next loop iteration
+				tick = ret.tick
+			case tick <- struct{}{}:
+				// Disable sending on the next loop iteration
+				tick = nil
 			}
 		}
 	}()
