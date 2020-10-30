@@ -390,7 +390,28 @@ func TestFoo(t *testing.T) {
 
 	// check that nothing happens
 	deployments.Write(marshal(t, "ADDED", &deployment))
+	step()
 
+	// check that we create a new deployment and delete the old one
+	foo.Spec.DeploymentName = "zed"
+	foos.Write(marshal(t, "ADDED", &foo))
+	deleteOK := make(chan struct{})
+	deleteFunc := func(req *http.Request) (*http.Response, error) {
+		deleteOK <- struct{}{}
+		return httpmock.NewStringResponse(200, ""), nil
+	}
+	server.RegisterResponder("DELETE", "/apis/apps/v1/namespaces/xyz/deployments/bar",
+		deleteFunc)
+	step()
+	<-deploymentOK
+	<-deleteOK
+
+	deployments.Write(marshal(t, "ADDED", &deployment))
+	step()
+
+	deployment.Name = "bar"
+	deployments.Write(marshal(t, "DELETED", &deployment))
+	deployment.Name = "zed"
 	step()
 
 	// Change UID so that ownership test fails
@@ -407,7 +428,7 @@ func TestFoo(t *testing.T) {
 		t.Fatal("ReadError", err)
 	}
 	data = buf[:n]
-	if !strings.HasSuffix(string(data), "Deployment xyz:bar is not owned by us.\n") {
+	if !strings.HasSuffix(string(data), "Deployment xyz:zed is not owned by us.\n") {
 		t.Errorf("wrong warning: %s", data)
 	}
 

@@ -105,6 +105,15 @@ func (client *KubeClient) Put(group, version, namespace, path string, obj interf
 	return client.putOrPost("PUT", group, version, namespace, path, obj)
 }
 
+// Delete does a DELETE request on a resource. See Post for the parameters.
+func (client *KubeClient) Delete(group, version, namespace, path string) error {
+	resp, err := client.do("DELETE", group, version, namespace, path, nil, nil)
+	if err == nil {
+		resp.Body.Close()
+	}
+	return err
+}
+
 // Returns true if the event is DELETED
 func parseEventType(ty string) (bool, error) {
 	// We get a full copy with MODIFIED, so we can treat it as ADDED
@@ -230,6 +239,11 @@ func (client *KubeClient) AddDeployment(deployment *appsv1.Deployment) error {
 func (client *KubeClient) UpdateDeployment(deployment *appsv1.Deployment) error {
 	return client.Put("apps", "v1", deployment.Namespace, "deployments/"+deployment.Name,
 		deployment)
+}
+
+// DeleteDeployment deletes a deployment.
+func (client *KubeClient) DeleteDeployment(deployment *appsv1.Deployment) error {
+	return client.Delete("apps", "v1", deployment.Namespace, "deployments/"+deployment.Name)
 }
 
 // AddCustomResourceDefinition adds a new CRD.

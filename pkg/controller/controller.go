@@ -123,6 +123,9 @@ type controllerStatus struct {
 
 	// Set of names of Foos we have to check
 	todo map[string]struct{}
+
+	// Set of names of deployments that might be orphans
+	orphans map[string]struct{}
 }
 
 func newDeployment(foo *Foo) appsv1.Deployment {
@@ -196,12 +199,25 @@ func synchronize(client *kubeapi.KubeClient, status *controllerStatus) error {
 			return err
 		}
 		delete(status.todo, item)
-
-		// FIXME2: What happens if DeploymentName
-		// changes? The original sample controller
-		// just creates a new deployment, that is
-		// almost certenly a bug.
 	}
+
+	for name := range status.orphans {
+		dep, has_dep := status.deployments[name]
+		if !has_dep {
+			continue
+		}
+		cont := metav1.GetControllerOfNoCopy(&dep)
+		if cont == nil {
+			continue
+		}
+		foo, ok := status.foos[cont.Name]
+		if !ok || foo.Spec.DeploymentName == dep.Name {
+			continue
+		}
+		client.DeleteDeployment(&dep)
+		delete(status.orphans, name)
+	}
+
 	return nil
 }
 
@@ -211,10 +227,8 @@ func processResources(c *Controller, deploymentsCh <-chan kubeapi.WatchEvent,
 	foosCh <-chan kubeapi.WatchEvent) {
 	defer close(c.Errors)
 
-	status := controllerStatus{}
-	status.foos = make(map[string]Foo)
-	status.deployments = make(map[string]appsv1.Deployment)
-	status.todo = make(map[string]struct{})
+	status := controllerStatus{make(map[string]Foo), make(map[string]appsv1.Deployment),
+		make(map[string]struct{}), make(map[string]struct{})}
 
 	addTODO := func(deployment *appsv1.Deployment) {
 		// Only add to TODO if we own it
@@ -264,7 +278,13 @@ func processResources(c *Controller, deploymentsCh <-chan kubeapi.WatchEvent,
 				break
 			}
 			newFoo := f.Item.(Foo)
+			oldFoo, ok := status.foos[newFoo.Name]
 			c.rl.AskTick()
+
+			if ok && oldFoo.Spec.DeploymentName != newFoo.Spec.DeploymentName {
+				status.orphans[oldFoo.Spec.DeploymentName] = struct{}{}
+			}
+
 			if f.IsDelete {
 				delete(status.foos, newFoo.Name)
 			} else {
