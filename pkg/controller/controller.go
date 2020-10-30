@@ -122,7 +122,7 @@ type controllerStatus struct {
 	deployments map[string]appsv1.Deployment
 
 	// Set of names of Foos we have to check
-	todo map[string]bool
+	todo map[string]struct{}
 }
 
 func newDeployment(foo *Foo) appsv1.Deployment {
@@ -214,7 +214,7 @@ func processResources(c *Controller, deploymentsCh <-chan kubeapi.WatchEvent,
 	status := controllerStatus{}
 	status.foos = make(map[string]Foo)
 	status.deployments = make(map[string]appsv1.Deployment)
-	status.todo = make(map[string]bool)
+	status.todo = make(map[string]struct{})
 
 	addTODO := func(deployment *appsv1.Deployment) {
 		// Only add to TODO if we own it
@@ -224,7 +224,7 @@ func processResources(c *Controller, deploymentsCh <-chan kubeapi.WatchEvent,
 			// often.
 			if o.Kind == Kind {
 				c.rl.AskTick()
-				status.todo[o.Name] = true
+				status.todo[o.Name] = struct{}{}
 				return
 			}
 		}
@@ -270,7 +270,7 @@ func processResources(c *Controller, deploymentsCh <-chan kubeapi.WatchEvent,
 			} else {
 				status.foos[newFoo.Name] = newFoo
 			}
-			status.todo[newFoo.Name] = true
+			status.todo[newFoo.Name] = struct{}{}
 
 		case <-c.rl.GetChan():
 			if err := synchronize(c.client, &status); err != nil {
