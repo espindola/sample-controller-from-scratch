@@ -1,7 +1,7 @@
 # Sample Controller
 
-This is an alternative implementation of the [sample controller]
-(https://github.com/kubernetes/sample-controller). The main
+This is an alternative implementation of the
+[sample controller](https://github.com/kubernetes/sample-controller). The main
 differences are
 
 * It registers the CRD with the API server, so it is easier to use.
