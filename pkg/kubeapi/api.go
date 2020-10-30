@@ -218,7 +218,7 @@ func (client *KubeClient) GetResources(group, version, namespace, path string, q
 // GetDeployments queries the api server for deployments. See GetResources for details.
 func (client *KubeClient) GetDeployments(namespace string) (<-chan WatchEvent, chan<- struct{}) {
 	return client.GetResources("apps", "v1", namespace, "deployments", nil,
-                appsv1.Deployment{})
+		appsv1.Deployment{})
 }
 
 // AddDeployment adds a new deployment.
@@ -229,7 +229,7 @@ func (client *KubeClient) AddDeployment(deployment *appsv1.Deployment) error {
 // UpdateDeployment replaces an existing deployment.
 func (client *KubeClient) UpdateDeployment(deployment *appsv1.Deployment) error {
 	return client.Put("apps", "v1", deployment.Namespace, "deployments/"+deployment.Name,
-                deployment)
+		deployment)
 }
 
 // AddCustomResourceDefinition adds a new CRD.
