@@ -263,14 +263,14 @@ func processResources(c *Controller, deploymentsCh <-chan kubeapi.WatchEvent,
 				foosCh = nil
 				break
 			}
-			item := f.Item.(Foo)
+			newFoo := f.Item.(Foo)
 			c.rl.AskTick()
 			if f.IsDelete {
-				delete(status.foos, item.Name)
+				delete(status.foos, newFoo.Name)
 			} else {
-				status.foos[item.Name] = item
+				status.foos[newFoo.Name] = newFoo
 			}
-			status.todo[item.Name] = true
+			status.todo[newFoo.Name] = true
 
 		case <-c.rl.GetChan():
 			if err := synchronize(c.client, &status); err != nil {
