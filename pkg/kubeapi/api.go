@@ -105,6 +105,7 @@ func (client *KubeClient) Put(group, version, namespace, path string, obj interf
 	return client.putOrPost("PUT", group, version, namespace, path, obj)
 }
 
+// Returns true if the event is DELETED
 func parseEventType(ty string) (bool, error) {
 	// We get a full copy with MODIFIED, so we can treat it as ADDED
 	switch ty {
@@ -127,9 +128,8 @@ type WatchEvent struct {
 	Err      error
 }
 
-func (client *KubeClient) produceResources(group, version, namespace, path string, query url.Values, v interface{},
-	out chan<- WatchEvent, stopCh <-chan struct{}) {
-
+func (client *KubeClient) produceResources(group, version, namespace, path string,
+	query url.Values, v interface{}, out chan<- WatchEvent, stopCh <-chan struct{}) {
 	defer close(out)
 	ty := reflect.TypeOf(v)
 	if query == nil {
