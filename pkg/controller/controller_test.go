@@ -320,16 +320,27 @@ func TestFoo(t *testing.T) {
 	foos.Write(marshal(t, "ADDED", &foo))
 
 	step := func() {
+		// Wait for the controller to ask at least once
 		<-rl.ask
+
+		// Authorize the controller to continue. We still have to keep an eye on rl.ask.
 	loop:
+		for {
+			select {
+			case rl.tick <- struct{}{}:
+				break loop
+			case <-rl.ask:
+			}
+		}
+
+		// If the controller issued more requests, clear them.
 		for {
 			select {
 			case <-rl.ask:
 			default:
-				break loop
+				return
 			}
 		}
-		rl.tick <- struct{}{}
 	}
 	step()
 	<-deploymentOK
