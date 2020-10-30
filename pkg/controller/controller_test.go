@@ -393,7 +393,10 @@ func TestFoo(t *testing.T) {
 
 	step()
 
+	// Change UID so that ownership test fails
 	deployment.OwnerReferences[0].UID = "wrong"
+	// Change owner kind to test that we still consider it
+	deployment.OwnerReferences[0].Kind = "Bar"
 
 	deployments.Write(marshal(t, "ADDED", &deployment))
 

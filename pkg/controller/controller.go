@@ -216,6 +216,20 @@ func processResources(c *Controller, deploymentsCh <-chan kubeapi.WatchEvent,
 	status.deployments = make(map[string]appsv1.Deployment)
 	status.todo = make(map[string]bool)
 
+	addTODO := func(deployment *appsv1.Deployment) {
+		// Only add to TODO if we own it
+		for _, o := range deployment.OwnerReferences {
+			// It is OK to not be supper strict in
+			// here. We will just try to synchronize more
+			// often.
+			if o.Kind == Kind {
+				c.rl.AskTick()
+				status.todo[o.Name] = true
+				return
+			}
+		}
+	}
+
 	for {
 		select {
 		case d, ok := <-deploymentsCh:
@@ -227,25 +241,17 @@ func processResources(c *Controller, deploymentsCh <-chan kubeapi.WatchEvent,
 				deploymentsCh = nil
 				break
 			}
-			item := d.Item.(appsv1.Deployment)
+			newDeployment := d.Item.(appsv1.Deployment)
+			oldDeployment, ok := status.deployments[newDeployment.Name]
 			if d.IsDelete {
-				delete(status.deployments, item.Name)
+				delete(status.deployments, newDeployment.Name)
 			} else {
-				status.deployments[item.Name] = item
+				status.deployments[newDeployment.Name] = newDeployment
 			}
-			// Only add to TODO if we own it
 
-			// FIXME: If this was not owned by a Foo, but
-			// a Foo wants to create a deployment with
-			// that name, we should add that Foo to TODO
-			for _, o := range item.OwnerReferences {
-				// FIXME: We probably have to look at more than just the name
-				// Maybe APIVersion?
-				if o.Kind == Kind {
-					c.rl.AskTick()
-					status.todo[o.Name] = true
-					break
-				}
+			addTODO(&newDeployment)
+			if ok {
+				addTODO(&oldDeployment)
 			}
 
 		case f, ok := <-foosCh:
