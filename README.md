@@ -1,1 +1,1 @@
-moved to https://git.sr.ht/~espindola/sample-controller-from-scratch
+moved to https://codeberg.org/espindola/sample-controller-from-scratch
